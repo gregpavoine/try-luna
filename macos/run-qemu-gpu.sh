@@ -80,6 +80,9 @@ esac
 # --- the factory ---------------------------------------------------------------
 factory="$guest_dir/factory.json"
 [[ -f $factory && ! -L $factory ]] || fail "the guest directory has no factory.json"
+factory_policy="$script_dir/luna-factory-policy.sh"
+[[ -f $factory_policy && ! -L $factory_policy ]] || fail "the LunaOS factory policy is missing or unsafe"
+/bin/bash "$factory_policy" "$factory"
 factory_field() {
   /usr/bin/plutil -extract "$1" raw -o - "$factory" 2>/dev/null
 }

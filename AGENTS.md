@@ -1,90 +1,13 @@
-# Agent instructions
+# Try Luna contributor instructions
 
-How to work on Try Omarchy. It's written for coding agents, and it works for people too.
+Try Luna is the LunaOS macOS VM launcher, derived from omacom/try-omarchy. Read README.md, UPSTREAM.md and docs/luna-architecture.md before editing.
 
-Try Omarchy runs stock Omarchy in a virtual machine on an Apple Silicon Mac, and bridges it to macOS so it feels native. It aims to be the best way to run Omarchy on a Mac.
-
-## Principles
-
-The full version is in [CONTRIBUTING.md](CONTRIBUTING.md#principles).
-
-- **A shell, not a distribution.** The guest is stock Omarchy. We don't modify Omarchy or its packages.
-- **Do the minimum.** Change only what Omarchy needs to work well in a VM on a Mac. A fix that real hardware also needs belongs upstream.
-- **Two places.** Everything inside the guest is one package, `try-omarchy`. Everything on the Mac is the app and its VM runtime.
-- **Shells all the way down.** Try is a shell for Omarchy, and Omarchy Installer is a shell for Try. This repository is the source of Try, the kit the installer embeds and fetches; the installer adds nothing of its own to the VM.
-- **Independent updates.** Omarchy updates itself. The app updates separately, and brings a newer `try-omarchy` package with it. Each version of the app must work with older and newer versions of the package.
-- **Follow Omarchy's channel.** We use `edge` today and move to `stable` when Omarchy releases its Mac image there.
-
-## Before you start
-
-- **Read the docs for the area you're changing:** first [docs/architecture.md](docs/architecture.md), then the component's README. For how it works, read the code.
-- **Read the task guide that matches your work,** in [agents/skills/](agents/skills/):
-  - [test-vms.md](agents/skills/test-vms.md): run and inspect a disposable VM;
-  - [visual-verification.md](agents/skills/visual-verification.md): check a visual change.
-
-  Add a guide when a procedure is worth repeating. Keep this file high level.
-- **Looking for work?** Look at the open [issues](https://github.com/omacom/try-omarchy/issues) and the backlog in [docs/vm-issues.md](docs/vm-issues.md).
-
-## Documentation layout
-
-- **`manual/`:** guides for users, covering only what's specific to Try Omarchy. Omarchy's own manual covers Omarchy.
-- **`docs/`:** how Try Omarchy works and why, for contributors.
-- **`agents/skills/`:** step-by-step guides for specific tasks.
-
-When users will notice a change, update the manual. When the design changes, update `docs/`.
-
-## Rules
-
-- **Never edit files owned by Omarchy or other packages.** Extend Omarchy through the `try-omarchy` package, using the mechanisms Omarchy and systemd provide.
-- **Package upgrades must work offline.** Everything the package needs must already be in the image.
-- **Treat the guest as untrusted.** Validate everything the Mac side receives from it.
-- **Version every package change,** so existing VMs pick it up.
-- **Leave the person's setup alone.** Never reset, delete or launch over their VM, and never take over a Mac someone is using. Test in a disposable VM.
-- **Some steps belong to a person.** Stop and ask for:
-  - granting macOS permissions;
-  - anything involving signing, notarization or credentials;
-  - releases, and anything that asks for a password or a confirmation.
-
-  Don't work around these steps.
-- **No secrets or personal data** in code, logs, captures or commits.
-- **Use `make`** for builds and tests. `make help` lists the targets.
-
-## Workflow
-
-1. **Branch from an up-to-date `main`,** with one concern per branch.
-2. **Read** the relevant docs.
-3. **Change the code, its tests and its docs together.**
-4. **Commit at sensible checkpoints.** Each subject says what changes for the user, for example `Keep audio playing after the Mac sleeps`.
-5. **Check that the change is [done](#done-means).**
-6. **Open a PR** with `gh pr create` and the [template](.github/pull_request_template.md). PRs are squash-merged, so write the title as a commit subject.
-7. **Watch CI and fix failures.** A maintainer reviews and merges.
-8. **Update the backlog.** Mark any entry you fixed or disproved.
-
-## Testing
-
-| Level | Where | Covers |
-| --- | --- | --- |
-| `make test` | Any Mac, and CI | Unit and contract tests for the app, scripts and package, and the run mode as a real process (`run-mode.test.sh`) |
-| Build | CI (macOS) | The runtime, and the kit built from it and checked with `make test-kit` |
-| Guest checks | CI (Linux) | The package installed on today's Omarchy, and the desktop booted on a virtual display |
-| `make e2e` | An Apple Silicon Mac | The real VM: hardware virtualization, the GPU, the Mac bridges, a second boot |
-
-- **Every mechanism ships with its check in CI.** A PR that adds a build step, a protocol, a file format or a script adds a CI check for it.
-- **CI covers everything that can be checked without booting the VM.** `make e2e` is the only exception: a change to the app, the runtime or the bridges needs it, and the PR says whether it ran.
-
-## Done means
-
-- The change has one concern, and its tests and docs are updated.
-- `make test` passes. For a docs-only change, `git diff --check` passes and the links resolve.
-- A new build step, protocol, file format or script has a check that runs in CI.
-- Changes to the VM, the app or the bridges pass `make e2e`.
-- Visual changes were checked in the real app or guest ([visual verification](agents/skills/visual-verification.md)).
-- The PR lists the exact commands, their results, and what wasn't checked.
-- Your test VMs are shut down and deleted.
-
-## Writing
-
-- **No code comments,** unless they say something the code can't, such as why a workaround exists and its upstream link. Make the code clear through names and structure.
-- **Keep docs, commits and PRs short and plain.** Say what something does, not how good it is. Use one idea per sentence.
-- **Write Markdown in full lines,** with no hard wrapping. Break lines only at structure: headings, list items, table rows.
-- **Docs describe intent and behaviour,** not implementation; that's in the code. History belongs in git.
+- The current product is the native Swift/AppKit ISO launcher and root `try-luna` Bash command. Use `make` for builds and tests.
+- Keep macOS 15+ and the built-in Bash 3.2 supported for the host launcher. Use native Swift and standard macOS tools; no Python interpreter on the preview launch path.
+- Reuse upstream native VM, storage and bridge code. Existing Omarchy-specific sources and docs are upstream references, not evidence of working LunaOS integrations. Do not run their stock-image factory or publishing scripts.
+- No public LunaOS release or ARM factory image is currently available. Never substitute Omarchy or a test fixture for LunaOS. The ARM guard requires LunaOS distribution and source provenance metadata before any factory build or launch.
+- Keep root ISO-emulation state under a Luna-specific user directory, separate from Try Omarchy data. Only create virtual files there. Never accept host block devices, overwrite an existing VM disk, or remove a user's VM. Treat paths, manifests and guest input as untrusted.
+- No remote Linux connection without an owner-provided SSH alias and explicit authorization. No changes to a real Linux installation without verified recovery and explicit authorization. Do not install Omarchy on macOS.
+- Mac permissions, developer signing identities, notarization and publication require the owner's action. Local builds do not use credentials or grant Mac permissions. Do not push unless the owner asks; the owner currently handles pushes.
+- Tests and build logs prove only what they exercise. Record actual compile, UI and VM results in docs/STATUS.md. A passing source test or compiled app does not prove LunaOS boots, installs or supports the inherited guest bridges.
+- Preserve upstream copyright, licenses and attribution. Commit coherent changes, keep Markdown lines unwrapped, and protect secrets and private data.

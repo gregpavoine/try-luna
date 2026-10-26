@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a problem with Try Omarchy
+about: Report a problem with Try Luna
 title: ''
 labels: ''
 assignees: ''

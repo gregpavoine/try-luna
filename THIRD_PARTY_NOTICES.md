@@ -1,3 +1,7 @@
+# Current preview scope
+
+The Try Luna ISO preview bundles the Swift launcher and Bash adapter. QEMU is an external prerequisite. The native ARM runtime components described below belong to the retained upstream implementation and are not included in the preview DMG.
+
 # Third-party notices
 
 Try Omarchy builds and redistributes third-party components under their own

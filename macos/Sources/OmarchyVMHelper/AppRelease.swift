@@ -51,7 +51,7 @@ struct InstalledAppRelease: Equatable {
 }
 
 struct AppRelease: Equatable {
-    static let releasesURL = URL(string: "https://github.com/omacom/try-omarchy/releases")!
+    static let releasesURL = URL(string: "https://github.com/gregpavoine/try-luna/releases")!
     let version: AppReleaseVersion
     let url: URL
 

@@ -73,9 +73,9 @@ enum ApplicationHelpLink: Int, CaseIterable {
 
     var url: URL {
         switch self {
-        case .usage: URL(string: "https://github.com/omacom/try-omarchy/blob/main/manual/README.md")!
-        case .troubleshooting: URL(string: "https://github.com/omacom/try-omarchy/blob/main/manual/troubleshooting.md")!
-        case .reportIssue: URL(string: "https://github.com/omacom/try-omarchy/issues")!
+        case .usage: URL(string: "https://github.com/gregpavoine/try-luna/blob/main/manual/README.md")!
+        case .troubleshooting: URL(string: "https://github.com/gregpavoine/try-luna/blob/main/manual/troubleshooting.md")!
+        case .reportIssue: URL(string: "https://github.com/gregpavoine/try-luna/issues")!
         }
     }
 }

@@ -15,11 +15,17 @@ private func effectiveArguments() -> [String] {
     if !supplied.isEmpty {
         return Array(supplied)
     }
-    return Bundle.main.bundleURL.pathExtension == "app" ? ["--run-qemu"] : []
+    guard Bundle.main.bundleURL.pathExtension == "app" else { return [] }
+    return Bundle.main.object(forInfoDictionaryKey: "LunaLaunchMode") as? String == "iso"
+        ? ["--run-luna-iso"] : ["--run-qemu"]
 }
 
 let arguments = effectiveArguments()
 do {
+    if arguments.first == "--run-luna-iso" {
+        guard arguments.count == 1 else { usage() }
+        MainActor.assumeIsolated { runLunaISOApplication() }
+    }
     if arguments.first == "--host-timezone" {
         guard arguments.count == 1 else { usage() }
         let zone = HostTimeZone.current()

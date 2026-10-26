@@ -123,7 +123,7 @@ public enum TryOmarchyStorage {
 /// The full app, Try Omarchy. Once it is installed, it owns the VM.
 public enum TryOmarchyApp {
     public static let bundleIdentifier = "dev.tryomarchy.native"
-    public static let downloadURL = URL(string: "https://github.com/omacom/try-omarchy/releases/latest")!
+    public static let downloadURL = URL(string: "https://github.com/gregpavoine/try-luna/releases/latest")!
 
     @MainActor
     public static func installedURL(workspace: NSWorkspace = .shared) -> URL? {

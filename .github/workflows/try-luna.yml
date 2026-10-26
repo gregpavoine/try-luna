@@ -1,0 +1,35 @@
+name: Try Luna preview
+
+on:
+  pull_request:
+  push:
+    branches: [main, codex/try-luna-bootstrap]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  macos-preview:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Local launcher and inherited reference tests
+        run: make test > "$RUNNER_TEMP/try-luna-tests.log" 2>&1
+      - name: Build development DMG
+        run: make dmg > "$RUNNER_TEMP/try-luna-build.log" 2>&1
+      - name: Retain development app and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: try-luna-development
+          path: |
+            dist/Try-Luna-*.dmg
+            dist/Try-Luna-*.sha256
+            ${{ runner.temp }}/try-luna-tests.log
+            ${{ runner.temp }}/try-luna-build.log
+          retention-days: 7

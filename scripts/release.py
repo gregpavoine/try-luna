@@ -144,7 +144,7 @@ def verify_release_artifacts(root: Path, tag: str) -> None:
         parts = manifest["parts"]
     except (OSError, ValueError, KeyError) as error:
         raise ValueError(f"the app has no factory download manifest: {error}") from error
-    prefix = f"https://github.com/omacom/try-omarchy/releases/download/{tag}/"
+    prefix = f"https://github.com/gregpavoine/try-luna/releases/download/{tag}/"
     for part in parts:
         name = part["url"].removeprefix(prefix)
         if name == part["url"] or "/" in name:

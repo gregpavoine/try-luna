@@ -101,7 +101,7 @@ case "$configuration" in
         echo 'build-app: production downloads the factory from the release of HEAD'"'"'s vX.Y.Z tag; tag HEAD or pass --factory-download-url' >&2
         exit 1
       }
-      factory_download_url="https://github.com/omacom/try-omarchy/releases/download/$release_tag/"
+      factory_download_url="https://github.com/gregpavoine/try-luna/releases/download/$release_tag/"
     fi
     ;;
   *) usage ;;
@@ -142,6 +142,7 @@ guest_dir=$(cd "$guest_dir" && pwd -P)
   echo "build-app: $guest_dir has no factory.json; run make guest" >&2
   exit 1
 }
+/bin/bash "$macos_dir/luna-factory-policy.sh" "$guest_dir/factory.json"
 guest_packages=${OMARCHY_GUEST_PACKAGES:-"$guest_dir/packages"}
 [[ -f $firmware_source/edk2-aarch64-code.fd && -f $firmware_source/edk2-licenses.txt ]] || {
   echo "build-app: missing UEFI firmware; run make firmware" >&2
@@ -273,6 +274,7 @@ install -m 0644 "$repo_dir/LICENSE" "$contents/Resources/LICENSE"
 install -m 0644 "$generated_icon" "$contents/Resources/TryOmarchy.icns"
 ditto "$runtime_source" "$contents/Resources/runtime"
 install -m 0755 "$macos_dir/run-qemu-gpu.sh" "$contents/Resources/scripts/run-qemu-gpu.sh"
+install -m 0755 "$macos_dir/luna-factory-policy.sh" "$contents/Resources/scripts/luna-factory-policy.sh"
 install -m 0644 "$macos_dir/qemu-port-forwarding.sh" \
   "$contents/Resources/scripts/qemu-port-forwarding.sh"
 install -m 0644 "$macos_dir/qemu-networking.sh" "$contents/Resources/scripts/qemu-networking.sh"

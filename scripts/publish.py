@@ -13,7 +13,7 @@ import sys
 from release import VERSION, git, release_assets, verify_release_artifacts
 
 
-REPOSITORY = "omacom/try-omarchy"
+REPOSITORY = "gregpavoine/try-luna"
 
 
 def gh(*arguments: str) -> str:

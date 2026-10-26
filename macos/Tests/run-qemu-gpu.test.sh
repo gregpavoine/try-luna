@@ -36,7 +36,7 @@ resources="$app/Contents/Resources"
 shims="$test_root/bin"
 mkdir -p "$app/Contents/MacOS" "$resources/guest" "$resources/guest-packages" "$resources/firmware" \
   "$resources/runtime/bin" "$resources/scripts" "$shims"
-cp "$macos_dir/run-qemu-gpu.sh" "$macos_dir/qemu-port-forwarding.sh" "$macos_dir/qemu-networking.sh" \
+cp "$macos_dir/run-qemu-gpu.sh" "$macos_dir/luna-factory-policy.sh" "$macos_dir/qemu-port-forwarding.sh" "$macos_dir/qemu-networking.sh" \
   "$macos_dir/network-identity.py" "$resources/scripts/"
 chmod 755 "$resources/scripts/run-qemu-gpu.sh"
 
@@ -118,7 +118,8 @@ chmod 755 "$app/Contents/MacOS/omarchy-vm-helper" "$resources/runtime/bin/zstd" 
 dd if=/dev/zero of="$resources/guest/omarchy-aarch64-edge.img.zst" bs=1048576 count=4 2>/dev/null
 sha=$(shasum -a 256 "$resources/guest/omarchy-aarch64-edge.img.zst" | cut -d' ' -f1)
 cat >"$resources/guest/factory.json" <<JSON
-{"format":1,"kind":"upstream-shell-factory","boot":"uefi-limine",
+{"format":1,"kind":"upstream-shell-factory","boot":"uefi-limine","platform":"aarch64",
+ "distribution":{"id":"lunaos","source_repository":"https://github.com/gregpavoine/LunaOS","source_revision":"0123456789abcdef0123456789abcdef01234567"},
  "disk":{"path":"omarchy-aarch64-edge.img","bytes":4194304,"sha256":"$sha"},
  "compressed":{"path":"omarchy-aarch64-edge.img.zst","sha256":"$sha"}}
 JSON

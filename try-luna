@@ -1,0 +1,313 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+fail() { printf 'try-luna: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Try Luna — run a LunaOS x86_64 guest in a local QEMU VM.
+
+Usage:
+  try-luna doctor
+  try-luna run --iso FILE [--memory MIB] [--cpus N] [--disk-gib N] [--name NAME] [--dry-run]
+  try-luna run [--memory MIB] [--cpus N] [--name NAME] [--dry-run]
+  try-luna --help
+
+The first run requires a local ISO9660 image. Later runs reuse the VM's disk.
+Defaults: 4096 MiB memory, 4 CPUs, 64 GiB sparse disk, VM name "default".
+Apple Silicon emulates the x86_64 guest with QEMU TCG and can be slow.
+Dry-run validates paths and prints the command without creating files or running VM tools.
+Networking uses outbound user-mode NAT, with no forwarded ports or host folder sharing.
+
+Runtime overrides:
+  TRY_LUNA_STATE_DIR   Absolute private state directory
+  TRY_LUNA_QEMU        qemu-system-x86_64 executable
+  TRY_LUNA_QEMU_IMG    qemu-img executable
+  TRY_LUNA_UEFI_CODE   Read-only x86_64 UEFI code image
+  TRY_LUNA_UEFI_VARS   Matching UEFI variables template, copied for each new VM
+
+QEMU and its firmware must already be installed. Automatic release downloads
+are not available in this checkpoint; no LunaOS public release was available
+when this launcher was prepared. Use --iso with a separately verified image.
+EOF
+}
+
+host_os=$(uname -s)
+host_arch=$(uname -m)
+
+mode_of() {
+  if [[ $host_os == Darwin ]]; then stat -f '%Lp' "$1"; else stat -c '%a' "$1"; fi
+}
+
+links_of() {
+  if [[ $host_os == Darwin ]]; then stat -f '%l' "$1"; else stat -c '%h' "$1"; fi
+}
+
+owner_of() {
+  if [[ $host_os == Darwin ]]; then stat -f '%u' "$1"; else stat -c '%u' "$1"; fi
+}
+
+trusted_directory() {
+  local path=$1 owner mode
+  [[ -d $path && ! -L $path ]] || fail "State ancestor must be a directory, without symlinks: $path"
+  owner=$(owner_of "$path")
+  [[ $owner == "$EUID" || $owner == 0 ]] || fail "State ancestor must belong to the current user or root: $path"
+  mode=$(mode_of "$path")
+  if (( (8#$mode & 0022) != 0 && (8#$mode & 01000) == 0 )); then
+    fail "Refusing writable ancestor without sticky protection: $path"
+  fi
+}
+
+private_path() {
+  local path=$1
+  [[ ! -L $path ]] || fail "Refusing symlink in VM state: $path"
+  [[ -O $path ]] || fail "VM state must be owned by the current user: $path"
+  local mode
+  mode=$(mode_of "$path")
+  (( (8#$mode & 0077) == 0 )) || fail "VM state must be private (directory 700, file 600): $path"
+}
+
+private_file() {
+  [[ -f $1 && ! -L $1 ]] || fail "VM state requires a regular file: $1"
+  private_path "$1"
+  [[ $(links_of "$1") == 1 ]] || fail "Hard-linked VM state is not supported: $1"
+}
+
+check_state_path() {
+  [[ $state == /* && $state != / && $state != *$'\n'* && $state != *$'\r'* ]] || fail 'State directory must be an absolute path without line breaks'
+  local part current=
+  local -a components
+  trusted_directory /
+  IFS=/ read -r -a components <<<"$state"
+  for part in "${components[@]}"; do
+    [[ -n $part ]] || continue
+    [[ $part != . && $part != .. ]] || fail 'State directory cannot contain . or .. components'
+    current="$current/$part"
+    [[ ! -L $current ]] || fail "Refusing symlink in state path: $current"
+    if [[ -e $current ]]; then trusted_directory "$current"; fi
+  done
+  if [[ -d $state ]]; then
+    private_path "$state"
+  fi
+  local directory
+  for directory in "$state/vms" "$vm_dir"; do
+    [[ ! -L $directory ]] || fail "Refusing symlink in VM state: $directory"
+    if [[ -e $directory ]]; then
+      [[ -d $directory ]] || fail "VM state path is not a directory: $directory"
+      private_path "$directory"
+    fi
+  done
+  if [[ ${1:-0} == 1 ]]; then
+    [[ -d $lock && ! -L $lock ]] || fail "VM lock changed while preparing the launch: $lock"
+    private_path "$lock"
+  else
+    [[ ! -e $lock && ! -L $lock ]] || fail "VM is locked by another launch, or a previous launch left a lock: $lock"
+  fi
+}
+
+find_executable() {
+  local override=$1 name=$2 candidate
+  if [[ -n $override ]]; then
+    [[ -f $override && -x $override ]] || fail "Executable is unavailable: $override"
+    printf '%s\n' "$override"
+  else
+    candidate=$(command -v "$name" || true)
+    if [[ -n $candidate && -f $candidate && -x $candidate ]]; then
+      printf '%s\n' "$candidate"
+    elif [[ -x /opt/homebrew/bin/$name ]]; then
+      printf '/opt/homebrew/bin/%s\n' "$name"
+    elif [[ -x /usr/local/bin/$name ]]; then
+      printf '/usr/local/bin/%s\n' "$name"
+    else
+      fail "Missing $name. Install QEMU before running Try Luna (on macOS: brew install qemu)."
+    fi
+  fi
+}
+
+find_firmware() {
+  firmware_code=${TRY_LUNA_UEFI_CODE:-}
+  firmware_vars=${TRY_LUNA_UEFI_VARS:-}
+  if [[ -n $firmware_code || -n $firmware_vars ]]; then
+    [[ -n $firmware_code && -n $firmware_vars ]] || fail 'Set both TRY_LUNA_UEFI_CODE and TRY_LUNA_UEFI_VARS'
+  else
+    local directory
+    for directory in /opt/homebrew/share/qemu /usr/local/share/qemu /usr/share/qemu; do
+      if [[ -f $directory/edk2-x86_64-code.fd && -f $directory/edk2-i386-vars.fd ]]; then
+        firmware_code="$directory/edk2-x86_64-code.fd"
+        firmware_vars="$directory/edk2-i386-vars.fd"
+        break
+      fi
+    done
+    if [[ -z $firmware_code ]]; then
+      for directory in /usr/share/OVMF /usr/share/edk2/ovmf /usr/share/edk2/x64; do
+        if [[ -f $directory/OVMF_CODE_4M.fd && -f $directory/OVMF_VARS_4M.fd ]]; then
+          firmware_code="$directory/OVMF_CODE_4M.fd"
+          firmware_vars="$directory/OVMF_VARS_4M.fd"
+          break
+        elif [[ -f $directory/OVMF_CODE.fd && -f $directory/OVMF_VARS.fd ]]; then
+          firmware_code="$directory/OVMF_CODE.fd"
+          firmware_vars="$directory/OVMF_VARS.fd"
+          break
+        fi
+      done
+    fi
+  fi
+  [[ -n $firmware_code && -f $firmware_code && -r $firmware_code && -n $firmware_vars && -f $firmware_vars && -r $firmware_vars ]] || fail 'Matching x86_64 UEFI code and variables firmware not found; install QEMU firmware or set both firmware overrides'
+}
+
+find_runtime() {
+  qemu=$(find_executable "${TRY_LUNA_QEMU:-}" qemu-system-x86_64)
+  qemu_img=$(find_executable "${TRY_LUNA_QEMU_IMG:-}" qemu-img)
+  find_firmware
+  accelerator=tcg,thread=multi
+  cpu=max
+  if [[ $host_os == Darwin ]]; then
+    display=cocoa
+    if [[ $host_arch == x86_64 ]]; then accelerator=hvf; cpu=host; fi
+  elif [[ $host_os == Linux ]]; then
+    display=gtk
+    if [[ $host_arch == x86_64 && -r /dev/kvm && -w /dev/kvm ]]; then accelerator=kvm; cpu=host; fi
+  else
+    fail "Unsupported host: $host_os. Use macOS or Linux."
+  fi
+}
+
+number_option() {
+  local value=$1 name=$2 minimum=$3 maximum=$4
+  [[ $value =~ ^[0-9]+$ && ${#value} -le 8 ]] || fail "$name must be an integer between $minimum and $maximum"
+  local number=$((10#$value))
+  (( number >= minimum && number <= maximum )) || fail "$name must be between $minimum and $maximum"
+  printf '%s\n' "$number"
+}
+
+keyval_path() { printf '%s' "${1//,/,,}"; }
+
+command=${1:---help}
+if (( $# > 0 )); then shift; fi
+case "$command" in
+  --help|-h|help) usage; exit 0 ;;
+  doctor|run) ;;
+  *) fail "Unknown command: $command. Use try-luna --help." ;;
+esac
+
+iso= memory=4096 cpus=4 disk_gib=64 vm_name=default dry_run=0
+while (( $# > 0 )); do
+  case "$1" in
+    --iso|--memory|--cpus|--disk-gib|--name)
+      option=$1
+      (( $# >= 2 )) && [[ -n $2 && $2 != --* ]] || fail "$option requires a value"
+      case "$option" in
+        --iso) iso=$2 ;;
+        --memory) memory=$(number_option "$2" memory 512 262144) ;;
+        --cpus) cpus=$(number_option "$2" cpus 1 64) ;;
+        --disk-gib) disk_gib=$(number_option "$2" disk-gib 8 2048) ;;
+        --name) vm_name=$2 ;;
+      esac
+      shift 2
+      ;;
+    --dry-run) dry_run=1; shift ;;
+    --release) fail 'Automatic release downloads are not available in this checkpoint; use run --iso FILE with a separately verified local LunaOS ISO.' ;;
+    --help|-h) usage; exit 0 ;;
+    *) fail "Unknown option: $1" ;;
+  esac
+done
+[[ $vm_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && ${#vm_name} -le 64 ]] || fail 'VM name must start with a letter or digit and contain at most 64 letters, digits, dots, underscores or hyphens'
+
+if [[ -n ${TRY_LUNA_STATE_DIR:-} ]]; then
+  state=${TRY_LUNA_STATE_DIR%/}
+elif [[ $host_os == Darwin ]]; then
+  state="$HOME/Library/Application Support/Try Luna"
+else
+  state="${XDG_STATE_HOME:-$HOME/.local/state}/try-luna"
+fi
+vm_dir="$state/vms/$vm_name"
+disk="$vm_dir/disk.qcow2"
+vars="$vm_dir/uefi-vars.fd"
+marker="$vm_dir/.try-luna-vm"
+lock="$vm_dir/.run-lock"
+check_state_path
+
+if [[ $command == doctor ]]; then
+  find_runtime
+  printf 'Host: %s %s\nGuest: x86_64 guest\nAcceleration: %s\nQEMU: %s\nQEMU image tool: %s\nUEFI code: %s\nUEFI variables template: %s\nVM state: %s\n' "$host_os" "$host_arch" "$accelerator" "$qemu" "$qemu_img" "$firmware_code" "$firmware_vars" "$state"
+  exit 0
+fi
+
+if [[ -n $iso ]]; then
+  [[ ! -L $iso ]] || fail "Refusing symlink ISO: $iso"
+  [[ -f $iso && -r $iso ]] || fail "Expected a readable regular ISO file: $iso"
+  [[ $iso != *$'\n'* && $iso != *$'\r'* ]] || fail 'ISO path cannot contain line breaks'
+  [[ $(dd if="$iso" bs=1 skip=32769 count=5 2>/dev/null) == CD001 ]] || fail 'Image is not an ISO9660 image (CD001 header missing)'
+  iso="$(cd "$(dirname "$iso")" && pwd -P)/$(basename "$iso")"
+fi
+
+existing=0
+if [[ -e $disk || -L $disk || -e $vars || -L $vars || -e $marker || -L $marker ]]; then
+  [[ -f $marker && ! -L $marker ]] || fail "Existing VM files have no Try Luna ownership marker: $vm_dir"
+  private_file "$marker"
+  [[ $(cat "$marker") == try-luna-v1 ]] || fail "Unrecognized Try Luna ownership marker: $marker"
+  [[ -f $disk && ! -L $disk ]] || fail "Existing VM state has no regular disk; recover it manually: $disk"
+  [[ -f $vars && ! -L $vars ]] || fail "Existing VM firmware variables are missing; recover them without resetting the disk: $vars"
+  private_file "$disk"
+  private_file "$vars"
+  existing=1
+else
+  [[ -n $iso ]] || fail 'No existing VM disk. The first run requires --iso FILE.'
+  if [[ -d $vm_dir ]]; then
+    for entry in "$vm_dir"/* "$vm_dir"/.[!.]* "$vm_dir"/..?*; do
+      [[ ! -e $entry && ! -L $entry ]] || fail "Unrecognized files already exist in VM directory: $vm_dir"
+    done
+  fi
+fi
+
+find_runtime
+args=(-no-user-config -nodefaults -name "Try Luna - $vm_name" -machine q35 -accel "$accelerator" -cpu "$cpu" -m "$memory" -smp "$cpus")
+args+=(-drive "if=pflash,format=raw,readonly=on,file=$(keyval_path "$firmware_code")")
+args+=(-drive "if=pflash,format=raw,file=$(keyval_path "$vars")")
+args+=(-drive "if=none,id=luna-disk,format=qcow2,file=$(keyval_path "$disk")" -device virtio-blk-pci,drive=luna-disk,bootindex=1)
+if [[ -n $iso ]]; then
+  args+=(-drive "if=none,id=luna-iso,format=raw,media=cdrom,readonly=on,file=$(keyval_path "$iso")" -device ide-cd,drive=luna-iso,bootindex=2)
+fi
+args+=(-device virtio-vga -display "$display" -device qemu-xhci -device usb-kbd -device usb-tablet -netdev user,id=luna-net -device virtio-net-pci,netdev=luna-net -rtc base=utc -boot menu=on -monitor none -serial none)
+
+printf 'LunaOS x86_64 guest — acceleration: %s\nVM: %s\n' "$accelerator" "$vm_dir"
+if (( dry_run )); then
+  printf 'Command:'
+  printf ' %q' "$qemu" "${args[@]}"
+  printf '\n'
+  exit 0
+fi
+
+mkdir -p "$state/vms"
+private_path "$state"
+private_path "$state/vms"
+if [[ ! -d $vm_dir ]]; then mkdir "$vm_dir"; fi
+private_path "$vm_dir"
+mkdir "$lock" 2>/dev/null || fail "VM is locked: $lock"
+qemu_pid=
+cleanup() { rmdir "$lock" 2>/dev/null || true; }
+stop_vm() {
+  local signal=$1 status=$2
+  if [[ -n $qemu_pid ]]; then kill "-$signal" "$qemu_pid" 2>/dev/null || true; wait "$qemu_pid" 2>/dev/null || true; fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'stop_vm TERM 143' TERM
+trap 'stop_vm INT 130' INT
+trap 'stop_vm HUP 129' HUP
+check_state_path 1
+if (( ! existing )); then
+  (set -C; printf 'try-luna-v1\n' >"$marker"; cat "$firmware_vars" >"$vars")
+  "$qemu_img" create -f qcow2 "$disk" "${disk_gib}G"
+fi
+private_file "$disk"
+private_file "$vars"
+disk_info=$(LC_ALL=C "$qemu_img" info -f qcow2 -- "$disk") || fail 'Cannot inspect the VM qcow2 disk'
+[[ $disk_info == *'file format: qcow2'* ]] || fail 'Existing VM disk is not qcow2'
+if [[ $disk_info == *'backing file:'* || $disk_info == *'data file:'* ]]; then fail 'VM disks with an external backing or data file are not supported'; fi
+"$qemu" "${args[@]}" &
+qemu_pid=$!
+if wait "$qemu_pid"; then status=0; else status=$?; fi
+qemu_pid=
+exit "$status"

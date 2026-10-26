@@ -1,10 +1,5 @@
-# Try Omarchy manual
+# Try Luna user guide
 
-These guides cover what's specific to running Omarchy inside Try Omarchy. For Omarchy itself, see [the Omarchy manual](https://learn.omacom.io/2/the-omarchy-manual).
+See the [current setup and launch instructions](../README.md). The current app opens a local LunaOS x86_64 ISO and keeps a separate virtual disk. After installation, boot the existing virtual disk without attaching the installer ISO. Apple Silicon uses x86_64 emulation for this preview.
 
-- [Getting started](getting-started.md): install, first launch, the launcher, permissions
-- [Omarchy on a Mac](omarchy-on-a-mac.md): keyboard, clipboard, audio, camera, display, and what differs from real hardware
-- [Files, network and devices](files-network-devices.md): the shared folder, ports, SSH, bridged networking, USB
-- [Touch ID](touch-id.md): `sudo` and 1Password
-- [Updates and your data](updates-and-data.md): how updates work, where the VM lives, resources, starting over
-- [Troubleshooting](troubleshooting.md): what to check, and where to report a problem
+The other guides in this directory were inherited from Try Omarchy and describe its ARM integrations. They are retained as upstream references. Their clipboard, Touch ID, shared-folder, camera, battery and GPU claims have not been verified for LunaOS and do not describe the current ISO preview.

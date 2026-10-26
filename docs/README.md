@@ -1,3 +1,7 @@
+# Try Luna documentation
+
+Read [the current LunaOS architecture](luna-architecture.md), [verification status](STATUS.md) and [upstream provenance](../UPSTREAM.md) first. The pages below are retained Try Omarchy design references; they do not establish working LunaOS capabilities.
+
 # Docs
 
 How Try Omarchy works, for contributors. User guides are in the [manual](../manual/README.md).
