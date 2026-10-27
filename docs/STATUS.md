@@ -1,6 +1,16 @@
 # Try Luna implementation status
 
-Checkpoint: 2026-10-26, macOS 27, Apple Silicon. This is an unsigned development preview of the Mac launcher, not a LunaOS release or proof that a guest image installs.
+Checkpoint: 2026-10-27, macOS 27, Apple Silicon. This is an unsigned development preview of the Mac launcher, not a LunaOS release or proof that a guest image installs.
+
+## Latest real-machine validation — 2026-10-27
+
+Fresh `make test` passed the 522 Swift tests and the retained host-shell suites. `make -C lunaos test check` passed in the main source checkout. A real native arm64 QEMU 11.1.2 runtime was staged only under `.build/validation-20261027/runtime` from official Homebrew bottles; every downloaded bottle matched its published SHA-256. Libraries were relocated and signed ad hoc locally, without a developer identity or global installation. The runtime provenance is in the ignored validation folder. The standard app still needs QEMU in its search path or explicit runtime overrides.
+
+The legacy `lunaos-0.1.1-x86_64.iso` matched its published local SHA-256 and booted through the real Try Luna CLI using UEFI, x86_64 TCG, two vCPUs, 3072 MiB RAM and an isolated 32 GiB qcow2 disk. Its serial log reached the systemd graphical target in 70.3 seconds and confirmed credential provisioning, Policy Broker and Core startup. This is not proof of a usable desktop or installation. Serial root login required a password; authenticated guest API exercises, desktop usability, install-to-disk and installed reboot were not completed. It is a legacy image result, not validation of the new Omarchy-style image pipeline.
+
+That real run found a macOS file-mode bug: `stat -f %Lp` omitted sticky bits and caused a trusted temporary directory to be refused. It is corrected to `%p`, with a regression observed failing before the fix and passing afterward. The final focused launcher suite passes 14 behavior groups, including real sticky-directory permission handling. The app and unsigned development DMG were rebuilt with this fix.
+
+At the owner's request, the old VM was stopped and its disposable disk removed, all 16 old GitHub ISO artifacts were deleted, the old main-repository ISO workflow was disabled and archived, and the local old ISO/part copies were removed (8,003,379,756 logical bytes). Both OS repositories have no published GitHub releases. Diagnostic serial logs and the boot result were retained; the historical ISO is no longer available locally. No Linux installation or existing user VM was changed.
 
 ## Implemented
 
@@ -16,7 +26,7 @@ Checkpoint: 2026-10-26, macOS 27, Apple Silicon. This is an unsigned development
 | Check | Actual result |
 | --- | --- |
 | `make test` | Relevant Swift and host-shell suites passed; 522 Swift tests in 99 suites, including the new ISO request tests. |
-| `bash tests/try-luna.test.sh` after final hardening | 13 behavior groups passed under macOS Bash 3.2, including persistence, no-side-effect planning, path/ownership refusal, locking, HUP/TERM and writable-ancestor refusal. VM tools are injected boundaries here; these tests do not boot QEMU. |
+| `bash tests/try-luna.test.sh` after final hardening | 14 behavior groups passed under macOS Bash 3.2, including persistence, no-side-effect planning, path/ownership refusal, locking, HUP/TERM and writable-ancestor refusal. VM tools are injected boundaries here; these tests do not boot QEMU. |
 | `bash tests/luna-factory-policy.test.sh` | 12 checks passed using real macOS plutil. |
 | `bash tests/luna-build-path.test.sh` | App/build/DMG/checksum symlinks rejected before compiler execution. Regressions were observed failing before their fixes. |
 | `make dmg` | Exit 0; real arm64 Mach-O executable, app bundle and approximately 2.1 MiB development DMG produced under `dist/`. |
@@ -30,9 +40,9 @@ The installed Command Line Tools needed a standard EnvironmentKey in place of th
 
 ## Blocked or unverified
 
-- QEMU is not installed on this Mac. The actual GUI diagnostic reports `Missing qemu-system-x86_64`; the application does not install it automatically.
+- No global QEMU was installed. An isolated native QEMU runtime is available and its doctor check passes with explicit overrides; a normal Finder launch still requires QEMU in the configured search paths. The application does not install it automatically.
 - Live GitHub checks found no public releases in `gregpavoine/LunaOS` or `gregpavoine/LunaOS-iso`. A separately verified local LunaOS ISO is required. Historical tags and authenticated Actions ZIPs are not public release images.
-- No actual guest boot, UEFI/QEMU compatibility test, graphical session, disk installation or installed-system reboot was run.
+- The withdrawn legacy image passed the real UEFI boot/startup check above. A fresh Omarchy-style image, usable desktop, disk installation and installed-system reboot remain unverified.
 - No LunaOS ARM factory exists here. Native CPU/GPU performance and inherited clipboard, Touch ID, camera, microphone, battery and folder-sharing integrations are not verified LunaOS features.
 - The DMG is an unsigned development artifact. Apple Developer signing, notarization, public app release and bundled QEMU distribution remain outstanding. The current preview requires external QEMU and has no automatic image downloader.
 - GitHub repository `gregpavoine/try-luna` exists but has no pushed source or Actions run from this work. The owner handles pushes.

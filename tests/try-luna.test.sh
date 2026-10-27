@@ -165,6 +165,16 @@ done
 [[ $outside_before == "$(cksum "$scratch/outside-data")" && $img_before == "$(cksum "$TRY_LUNA_TEST_IMG_LOG")" && $qemu_before == "$(cksum "$TRY_LUNA_TEST_QEMU_LOG")" ]] || fail 'untrusted ancestor refusal touched outside data or invoked VM tools'
 ok 'private existing and new state below a nonsticky writable ancestor are refused before mutation'
 
+sticky_parent="$scratch/sticky-shared-parent"
+mkdir "$sticky_parent"
+chmod 1777 "$sticky_parent"
+if ! TRY_LUNA_STATE_DIR="$sticky_parent/new-state" run run --iso "$iso" --dry-run; then
+  cat "$scratch/output" >&2
+  fail 'trusted sticky ancestor was refused'
+fi
+[[ ! -e $sticky_parent/new-state && $img_before == "$(cksum "$TRY_LUNA_TEST_IMG_LOG")" && $qemu_before == "$(cksum "$TRY_LUNA_TEST_QEMU_LOG")" ]] || fail 'sticky ancestor dry-run created state or invoked VM tools'
+ok 'trusted sticky temporary directories are allowed without mutating dry-run state'
+
 export TRY_LUNA_TEST_WAIT=1
 export TRY_LUNA_TEST_READY="$scratch/ready"
 export TRY_LUNA_TEST_VM_PID="$scratch/vm.pid"
