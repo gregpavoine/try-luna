@@ -64,13 +64,13 @@ rm -rf -- "$app"
 mv "$stage/Try Luna.app" "$app"
 printf 'Local preview: %s\n' "$app"
 if (( make_dmg )); then
-  dmg_stage="$stage/dmg"
+  dmg_stage="$stage/Try Luna"
   mkdir -p "$dmg_stage"
   ditto "$app" "$dmg_stage/Try Luna.app"
   ln -s /Applications "$dmg_stage/Applications"
   staged_dmg="$stage/Try-Luna.dmg"
   if diskutil image create from --help >/dev/null 2>&1; then
-    diskutil image create from --format UDZO --volumeName 'Try Luna' "$dmg_stage" "$staged_dmg"
+    diskutil image create from --format UDZO "$dmg_stage" "$staged_dmg"
   else
     hdiutil create -volname 'Try Luna' -srcfolder "$dmg_stage" -format UDZO "$staged_dmg"
   fi

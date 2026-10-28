@@ -15,16 +15,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
         with:
           persist-credentials: false
       - name: Local launcher and inherited reference tests
-        run: make test > "$RUNNER_TEMP/try-luna-tests.log" 2>&1
+        run: |
+          if make test > "$RUNNER_TEMP/try-luna-tests.log" 2>&1; then
+            echo 'Try Luna tests passed'
+          else
+            status=$?
+            cat "$RUNNER_TEMP/try-luna-tests.log"
+            exit "$status"
+          fi
       - name: Build development DMG
-        run: make dmg > "$RUNNER_TEMP/try-luna-build.log" 2>&1
+        run: |
+          if make dmg > "$RUNNER_TEMP/try-luna-build.log" 2>&1; then
+            echo 'Try Luna DMG built'
+          else
+            status=$?
+            cat "$RUNNER_TEMP/try-luna-build.log"
+            exit "$status"
+          fi
       - name: Retain development app and logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
         with:
           name: try-luna-development
           path: |
