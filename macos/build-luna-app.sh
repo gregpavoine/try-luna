@@ -3,15 +3,46 @@
 set -euo pipefail
 
 make_dmg=0
-case ${1:-} in
-  --dmg) make_dmg=1; shift ;;
-  --help)
-    echo 'Usage: macos/build-luna-app.sh [--dmg]'
-    echo 'Build the local Try Luna ISO preview. QEMU is a separate prerequisite.'
-    exit 0
-    ;;
-esac
-(( $# == 0 )) || { echo 'Unknown build argument' >&2; exit 64; }
+sign_identity=-
+notarize_profile=
+while (($#)); do
+  case "$1" in
+    --dmg) make_dmg=1; shift ;;
+    --sign-identity|--notarize-profile)
+      option=$1
+      (($# >= 2)) && [[ -n $2 && $2 != --* ]] || { echo "$option requires a value" >&2; exit 64; }
+      if [[ $option == "--sign-identity" ]]; then
+        sign_identity=$2
+      else
+        notarize_profile=$2
+        make_dmg=1
+      fi
+      shift 2
+      ;;
+    --help)
+      echo 'Usage: macos/build-luna-app.sh [--dmg] [--sign-identity IDENTITY] [--notarize-profile KEYCHAIN_PROFILE]'
+      echo 'Development builds seal the app ad hoc. Distribution uses an explicit Developer ID and notarization profile.'
+      exit 0
+      ;;
+    *) echo "Unknown build argument: $1" >&2; exit 64 ;;
+  esac
+done
+if [[ -n $notarize_profile && $sign_identity == "-" ]]; then
+  echo 'Notarization requires an explicit Developer ID Application identity' >&2
+  exit 64
+fi
+notarize() {
+  local image=$1 result_file=$2 result status
+  if xcrun notarytool submit "$image" --keychain-profile "$notarize_profile" --wait --timeout 10m --output-format json >"$result_file"; then
+    cat "$result_file"
+  else
+    status=$?
+    cat "$result_file"
+    return "$status"
+  fi
+  result=$(/usr/bin/plutil -extract status raw -o - "$result_file")
+  [[ $result == "Accepted" ]] || { echo "Apple notarization status: $result" >&2; return 1; }
+}
 [[ $(uname -s) == "Darwin" ]] || { echo 'Try Luna requires macOS 15 or newer' >&2; exit 1; }
 native_dir=$(cd "$(dirname "$0")" && pwd -P)
 repo_dir=$(cd "$native_dir/.." && pwd -P)
@@ -60,6 +91,21 @@ icon_512x512.png 512
 SIZES
 iconutil -c icns "$iconset" -o "$contents/Resources/TryLuna.icns"
 plutil -lint "$contents/Info.plist"
+sign_options=(--force --sign "$sign_identity" --identifier io.lunaos.tryluna.preview)
+if [[ $sign_identity == "-" ]]; then
+  sign_options+=(--timestamp=none)
+else
+  sign_options+=(--options runtime --timestamp)
+fi
+codesign "${sign_options[@]}" "$stage/Try Luna.app"
+codesign --verify --deep --strict --verbose=2 "$stage/Try Luna.app"
+if [[ -n $notarize_profile ]]; then
+  ditto -c -k --keepParent "$stage/Try Luna.app" "$stage/Try-Luna-notary.zip"
+  notarize "$stage/Try-Luna-notary.zip" "$stage/app-notarization.json"
+  xcrun stapler staple "$stage/Try Luna.app"
+  xcrun stapler validate "$stage/Try Luna.app"
+  spctl --assess --type execute --verbose=4 "$stage/Try Luna.app"
+fi
 rm -rf -- "$app"
 mv "$stage/Try Luna.app" "$app"
 printf 'Local preview: %s\n' "$app"
@@ -77,7 +123,21 @@ if (( make_dmg )); then
     staged_dmg="$stage/Try-Luna-hdiutil.dmg"
     hdiutil create -volname 'Try Luna' -srcfolder "$dmg_stage" -format UDZO "$staged_dmg"
   fi
+  if [[ $sign_identity != "-" ]]; then
+    codesign --force --sign "$sign_identity" --identifier io.lunaos.tryluna.preview.disk-image --timestamp "$staged_dmg"
+    codesign --verify --strict --verbose=2 "$staged_dmg"
+  fi
+  if [[ -n $notarize_profile ]]; then
+    notarize "$staged_dmg" "$stage/dmg-notarization.json"
+    xcrun stapler staple "$staged_dmg"
+    xcrun stapler validate "$staged_dmg"
+    spctl --assess --type open --context context:primary-signature --verbose=4 "$staged_dmg"
+  fi
   mv -- "$staged_dmg" "$dmg"
   shasum -a 256 "$dmg" >"$dmg.sha256"
-  printf 'Unsigned development DMG: %s\n' "$dmg"
+  if [[ -n $notarize_profile ]]; then
+    printf 'Developer ID signed and notarized DMG: %s\n' "$dmg"
+  else
+    printf 'Development DMG (not notarized): %s\n' "$dmg"
+  fi
 fi

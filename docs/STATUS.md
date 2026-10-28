@@ -2,6 +2,16 @@
 
 Checkpoint: 2026-10-27, macOS 27, Apple Silicon. This is an unsigned development preview of the Mac launcher, not a LunaOS release or proof that a guest image installs.
 
+## Bundle signature correction — 2026-10-28
+
+The published `v0.1.0-preview.1` app was invalid as a bundle: native codesign reported `code has no resources but signature indicates they must be present`, with an unbound Info.plist and no sealed resources. The DMG's valid SHA-256 and image checksum did not detect that packaging defect. The affected prerelease was withdrawn to draft while the distribution is repaired.
+
+The packager now seals the final app after copying all resources, verifies it before packaging, and supports explicit Developer ID signing with hardened runtime and a secure timestamp. An optional keychain-backed notarization path requires Apple's JSON status `Accepted`, staples and validates the app before creating the DMG, then signs/notarizes/staples the DMG and requires Gatekeeper acceptance. The final checksum is generated after signing and stapling. No camera, microphone or hypervisor entitlements are added to the ISO launcher.
+
+A real signature regression first failed on the broken app, then passed after sealing. It verifies an intact ditto copy and proves that modifying its bundled LICENSE is rejected by native codesign. Invalid signing/notarization arguments are refused before compilation. CI now runs `make test-app-signature` after building the development DMG. Build number is 2.
+
+At this checkpoint, native resource-signature checks passed for both ad hoc and owner-authorized Developer ID builds. The owner-approved Developer ID signature and secure timestamp were applied successfully without exporting the private key. A quarantined Developer ID candidate still returns `source=Unnotarized Developer ID` from Gatekeeper. No existing notarytool profile was found through a metadata-only lookup, so Apple submission, stapling and final Gatekeeper acceptance are not yet verified. No corrected public package is claimed until those checks pass. Gatekeeper and quarantine protections remain enabled.
+
 ## GitHub Actions runtime and DMG compatibility — 2026-10-28
 
 [Run 40741960757](https://github.com/gregpavoine/try-luna/actions/runs/40741960757) passed its 522 Swift tests and host-shell suites and compiled the app, then failed packaging because the macOS 15 diskutil rejected `--volumeName`. Its retained artifact contained logs only. The Node.js 20 deprecation warning was emitted afterward and was not the failure cause.

@@ -25,7 +25,15 @@ open "dist/app.noindex/Try Luna.app"
 
 Choose a LunaOS ISO, select RAM and CPUs, then start it. Boot tries the virtual disk first and uses the ISO when that disk is blank. After installation, close the QEMU window and use **Démarrer le disque existant** to boot the persistent virtual disk. The app never starts a VM just by opening the launcher.
 
-`make dmg` creates an unsigned development DMG in `dist/`. No signed or notarized public download is currently available. QEMU remains a separate prerequisite for this preview.
+`make dmg` creates a development DMG in `dist/`. The app bundle is sealed with an ad hoc signature and verified for resource integrity; this does not establish Developer ID or Gatekeeper trust. QEMU remains a separate prerequisite for this preview.
+
+For an owner-authorized distribution build, use an existing Developer ID Application identity and a `notarytool` keychain profile:
+
+```bash
+macos/build-luna-app.sh --sign-identity "Developer ID Application: YOUR NAME (TEAMID)" --notarize-profile "YOUR_KEYCHAIN_PROFILE"
+```
+
+The script requires Apple to accept the app and DMG, staples both tickets, validates them and requires Gatekeeper acceptance before reporting a notarized DMG. Credentials stay in the keychain. No signing credentials are included in CI or this repository. The earlier `v0.1.0-preview.1` package was withdrawn because its assembled app lacked a valid resource seal. A corrected public download must pass these distribution checks.
 
 ## Command line
 

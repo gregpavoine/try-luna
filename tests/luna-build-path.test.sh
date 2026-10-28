@@ -14,6 +14,16 @@ exit 73
 STUB
 chmod +x "$work/bin/swift"
 export LUNA_COMPILER_CALLED="$work/compiler-called"
+reject_arguments() {
+  if PATH="$work/bin:$PATH" bash "$work/repo/macos/build-luna-app.sh" "$@" >"$work/output" 2>&1; then
+    echo 'invalid signing arguments were accepted' >&2
+    exit 1
+  fi
+  [[ ! -e $LUNA_COMPILER_CALLED ]] || { echo 'invalid signing arguments reached the compiler' >&2; exit 1; }
+}
+reject_arguments --notarize-profile
+reject_arguments --notarize-profile example
+reject_arguments --sign-identity --dmg
 reject_symlink() {
   if PATH="$work/bin:$PATH" bash "$work/repo/macos/build-luna-app.sh" "$@" >"$work/output" 2>&1; then
     echo 'unsafe build path was accepted' >&2

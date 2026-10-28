@@ -36,6 +36,8 @@ jobs:
             cat "$RUNNER_TEMP/try-luna-build.log"
             exit "$status"
           fi
+      - name: Verify application signature and sealed resources
+        run: make test-app-signature
       - name: Retain development app and logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
