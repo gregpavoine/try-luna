@@ -69,9 +69,12 @@ if (( make_dmg )); then
   ditto "$app" "$dmg_stage/Try Luna.app"
   ln -s /Applications "$dmg_stage/Applications"
   staged_dmg="$stage/Try-Luna.dmg"
-  if diskutil image create from --help >/dev/null 2>&1; then
-    diskutil image create from --format UDZO "$dmg_stage" "$staged_dmg"
+  if diskutil image create from --help >/dev/null 2>&1 &&
+    diskutil image create from --format UDZO "$dmg_stage" "$staged_dmg" >"$stage/diskutil-image.log" 2>&1; then
+    cat "$stage/diskutil-image.log"
   else
+    printf '%s\n' 'Using hdiutil for development DMG creation'
+    staged_dmg="$stage/Try-Luna-hdiutil.dmg"
     hdiutil create -volname 'Try Luna' -srcfolder "$dmg_stage" -format UDZO "$staged_dmg"
   fi
   mv -- "$staged_dmg" "$dmg"
